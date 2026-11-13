@@ -116,7 +116,6 @@ func (g *Gateway) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	}
 	// Proxies carry Go-tier traffic whenever Go keys exist, and every lane
 	// while WARP is off; free-model traffic alone does not need them.
-	proxyBlocking := proxyHealthy == 0 && (g.warp == nil || goKeys > 0)
 	if proxyHealthy == 0 {
 		issues = append(issues, "no_healthy_proxies")
 	}
@@ -125,7 +124,7 @@ func (g *Gateway) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	if len(issues) > 0 {
 		status = "degraded"
 	}
-	blocking := modelStatus == "pending" || modelStatus == "empty" || warpBlocking || proxyBlocking
+	blocking := modelStatus == "pending" || modelStatus == "empty" || warpBlocking || proxyHealthy == 0 || (zenKeys+goKeys == 0 && !g.cfg.Anonymous)
 	httpStatus := http.StatusOK
 	ready := !blocking
 	if blocking {

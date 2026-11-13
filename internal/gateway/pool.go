@@ -427,6 +427,14 @@ func (p *anonymousNodes) RestoreProxy(proxy *proxyTransport) int {
 // full.
 const maxAnonymousRetryAfterMultiplier = 8
 
+// maxKeyRetryAfterMultiplier bounds an upstream Retry-After on key lanes to
+// the same 8x ceiling. Key cursors do fall back to the node that recovers
+// first, so ordinary quota delays still steer traffic correctly — but a single
+// absurd value (hours, or a far-future HTTP date) must not shelve a key
+// almost permanently, which in a single-key deployment stalls the whole lane.
+// A capped key is simply retried sooner; a genuine quota answers 429 again.
+const maxKeyRetryAfterMultiplier = 8
+
 // MarkFailure cools node down after an error or a 401, 403, 429 or 5xx
 // response; any other response leaves it untouched, and #pool nodes are never
 // cooled. The cooldown doubles with each consecutive failure, from the
@@ -958,7 +966,7 @@ func (p *upstreamNodes) MarkFailure(node *upstreamNode, resp *http.Response, err
 	delay := p.cooldown * multiplier
 	if resp != nil {
 		if retryAfter := parseRetryAfter(resp.Header.Get("Retry-After")); retryAfter > delay {
-			delay = retryAfter
+			delay = min(retryAfter, p.cooldown*time.Duration(maxKeyRetryAfterMultiplier))
 		}
 	}
 	node.cooldownUntil.Store(time.Now().Add(delay).UnixNano())
